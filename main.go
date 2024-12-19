@@ -15,8 +15,7 @@ import (
 )
 
 var (
-	prAzureProjectURL = env.Var("AZURE_DEVOPS_PROJECT_URL").FallsbackTo(env.Var("AZURE_DEVOPS_URL"))
-	prAzureToken      = env.Var("AZURE_DEVOPS_EXT_PAT").FallsbackTo(env.Var("AZURE_DEVOPS_TOKEN"))
+	prAzureToken = env.Var("AZURE_DEVOPS_EXT_PAT").FallsbackTo(env.Var("AZURE_DEVOPS_TOKEN"))
 )
 
 // AzureHost Represents an Azure Devops client config and information for the Azure Devops target

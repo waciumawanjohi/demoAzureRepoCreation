@@ -18,6 +18,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
-      - name: Install dependencies
+      - name: Run main
+        env: # Or as an environment variable
+          AZURE_DEVOPS_EXT_PAT: ${{ secrets.AZURE_DEVOPS_EXT_PAT }}
         run: |
           go run main.go
