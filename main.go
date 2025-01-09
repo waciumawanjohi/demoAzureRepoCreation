@@ -16,6 +16,7 @@ import (
 
 var (
 	prAzureToken = env.Var("AZURE_DEVOPS_EXT_PAT").FallsbackTo(env.Var("AZURE_DEVOPS_TOKEN"))
+	azureURL     = "https://dev.azure.com/tanzu-scc/catalog_test"
 )
 
 // AzureHost Represents an Azure Devops client config and information for the Azure Devops target
@@ -29,13 +30,23 @@ type AzureHost struct {
 }
 
 func main() {
+	err, host := createClient()
+	timedName := getTimedName()
+
+	repo, err := host.CreateRepository(context.TODO(), timedName)
+	if err != nil {
+		panic(fmt.Errorf("could not create azure repository '%s': %w", timedName, err))
+	}
+
+	fmt.Printf("Success! Visit %s/%s\n", host.host, repo.FullName)
+}
+
+func createClient() (error, *AzureHost) {
 	var fullOrg *url.URL
 	var err error
-	azureURLString := "https://dev.azure.com/tanzu-scc/catalog_test"
-
-	fullOrg, err = url.Parse(azureURLString)
+	fullOrg, err = url.Parse(azureURL)
 	if err != nil {
-		panic(fmt.Errorf("failed to parse url '%s': %w", azureURLString, err))
+		panic(fmt.Errorf("failed to parse url '%s': %w", azureURL, err))
 	}
 
 	host := &AzureHost{
@@ -50,14 +61,7 @@ func main() {
 	if err != nil {
 		panic(fmt.Errorf("could not create azure client: '%w'", err))
 	}
-
-	timedName := getTimedName()
-	repo, err := host.CleanRepository(context.TODO(), timedName)
-	if err != nil {
-		panic(fmt.Errorf("could not clean azure repo: '%w'", err))
-	}
-
-	fmt.Printf("Success! Visit %s/%s\n", host.host, repo.FullName)
+	return err, host
 }
 
 func getTimedName() string {
@@ -69,47 +73,11 @@ func getTimedName() string {
 	return re.ReplaceAllString(dateTime, "_")
 }
 
-func (h AzureHost) CleanRepository(ctx context.Context, name string) (*scm.Repository, error) {
-	repoPath := fmt.Sprintf("%s/%s", h.org, name)
-	res, err := h.client.Repositories.Delete(ctx, repoPath)
-	if err != nil {
-		if res != nil {
-			if res.Status == 404 {
-				fmt.Printf("repository does not exist, not an error. repository_name: %s\n", name)
-			} else {
-				return nil, fmt.Errorf("error deleting repository '%s': %w", name, err)
-			}
-		} else {
-			return nil, fmt.Errorf("error deleting repository '%s': %w", name, err)
-		}
-	}
-
-	var retryErr error
+func (h AzureHost) CreateRepository(ctx context.Context, name string) (*scm.Repository, error) {
+	var err error
+	var repo *scm.Repository
 	maxRetries := 2
 
-	var repo *scm.Repository
-
-	// TODO does azure need retries?
-	for retries := 0; retries < maxRetries; retries++ {
-		repo, retryErr = h.CreateRepository(ctx, name)
-		if retryErr == nil {
-			break
-		}
-		fmt.Printf(fmt.Errorf("create repo failed, will retry. retryError: %w, repository_name: %s\n", retryErr.Error(), name).Error())
-		time.Sleep(3 * time.Second)
-	}
-	if retryErr != nil {
-		return nil, retryErr
-	}
-
-	// this special info log makes it possible to locate the repository created for the test. eg:
-	// INFO[0005] created shortened repository logger=outerloop-basic-with-pr.azure-clean-repository scenario= repository_name=catalog-test.rash2.ootb-supply-chain-basic-outer-pr-azure shortened_name=catalog-test.rash2.FfVLfj8oEcu
-	fmt.Printf("created shortened repository\n")
-
-	return repo, nil
-}
-
-func (h AzureHost) CreateRepository(ctx context.Context, name string) (*scm.Repository, error) {
 	ri := &scm.RepositoryInput{
 		Namespace:   h.org,
 		Name:        name,
@@ -117,10 +85,18 @@ func (h AzureHost) CreateRepository(ctx context.Context, name string) (*scm.Repo
 		Private:     true,
 	}
 
-	r, _, err := h.client.Repositories.Create(ctx, ri)
+	for retries := 0; retries < maxRetries; retries++ {
+		repo, _, err = h.client.Repositories.Create(ctx, ri)
+
+		if err == nil {
+			break
+		}
+		fmt.Printf(fmt.Errorf("create repo failed, will retry. retryError: %w, repository_name: %s\n", err, name).Error())
+		time.Sleep(3 * time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("could not create azure repository '%s': %w", name, err)
+		return nil, err
 	}
 
-	return r, nil
+	return repo, nil
 }
