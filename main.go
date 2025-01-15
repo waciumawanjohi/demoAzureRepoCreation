@@ -30,7 +30,7 @@ type AzureHost struct {
 }
 
 func main() {
-	err, host := createClient()
+	host, err := createClient()
 	timedName := getTimedName()
 
 	repo, err := host.CreateRepository(context.TODO(), timedName)
@@ -41,7 +41,7 @@ func main() {
 	fmt.Printf("Success! Visit %s/%s\n", host.host, repo.FullName)
 }
 
-func createClient() (error, *AzureHost) {
+func createClient() (*AzureHost, error) {
 	var fullOrg *url.URL
 	var err error
 	fullOrg, err = url.Parse(azureURL)
@@ -61,7 +61,7 @@ func createClient() (error, *AzureHost) {
 	if err != nil {
 		panic(fmt.Errorf("could not create azure client: '%w'", err))
 	}
-	return err, host
+	return host, err
 }
 
 func getTimedName() string {
